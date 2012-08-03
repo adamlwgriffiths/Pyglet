@@ -403,7 +403,9 @@ class XlibWindow(BaseWindow):
         if self._override_redirect:
             # Possibly an override_redirect issue.
             self.activate()
-
+        
+        self._update_view_size()
+        
         self.dispatch_event('on_resize', self._width, self._height)
         self.dispatch_event('on_show')
         self.dispatch_event('on_expose')
@@ -430,6 +432,18 @@ class XlibWindow(BaseWindow):
         xlib.XGetWindowAttributes(self._x_display, self._window,
                                   byref(attributes))
         return attributes.root
+
+    def _is_reparented(self):
+        root = c_ulong()
+        parent = c_ulong()
+        children = pointer(c_ulong())
+        n_children = c_uint()
+        
+        xlib.XQueryTree(self._x_display, self._window,
+                        byref(root), byref(parent), byref(children),
+                        byref(n_children))
+        
+        return root.value != parent.value
 
     def close(self):
         if not self._window:
@@ -504,16 +518,17 @@ class XlibWindow(BaseWindow):
         return self._width, self._height
 
     def set_location(self, x, y):
-        # Assume the window manager has reparented our top-level window
-        # only once, in which case attributes.x/y give the offset from
-        # the frame to the content window.  Better solution would be
-        # to use _NET_FRAME_EXTENTS, where supported.
-        attributes = xlib.XWindowAttributes()
-        xlib.XGetWindowAttributes(self._x_display, self._window,
-                                  byref(attributes))
-        # XXX at least under KDE's WM these attrs are both 0
-        x -= attributes.x
-        y -= attributes.y
+        if self._is_reparented():
+            # Assume the window manager has reparented our top-level window
+            # only once, in which case attributes.x/y give the offset from
+            # the frame to the content window.  Better solution would be
+            # to use _NET_FRAME_EXTENTS, where supported.
+            attributes = xlib.XWindowAttributes()
+            xlib.XGetWindowAttributes(self._x_display, self._window,
+                                      byref(attributes))
+            # XXX at least under KDE's WM these attrs are both 0
+            x -= attributes.x
+            y -= attributes.y
         xlib.XMoveWindow(self._x_display, self._window, x, y)
 
     def get_location(self):
@@ -1225,9 +1240,9 @@ class XlibWindow(BaseWindow):
         w, h = ev.xconfigure.width, ev.xconfigure.height
         x, y = ev.xconfigure.x, ev.xconfigure.y
         if self._width != w or self._height != h:
-            self._update_view_size()
             self._width = w
             self._height = h
+            self._update_view_size()
             self._needs_resize = True
         if self._x != x or self._y != y:
             self.dispatch_event('on_move', x, y)
