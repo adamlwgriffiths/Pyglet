@@ -955,18 +955,44 @@ class ImageData(AbstractImage):
                             format, type,
                             data)
         elif internalformat:
-            glTexImage2D(target, level,
-                         internalformat,
-                         self.width, self.height,
-                         0,
-                         format, type,
-                         data)
+            if target != GL_TEXTURE_1D:
+                glTexImage2D(target, level,
+                             internalformat,
+                             self.width, self.height,
+                             0,
+                             format, type,
+                             data)
+            else:
+                assert target == GL_TEXTURE_1D
+                glTexImage1D(
+                    target,
+                    level,
+                    internalformat,
+                    self.width,
+                    0,
+                    format,
+                    type,
+                    data
+                    )
         else:
-            glTexSubImage2D(target, level,
-                            x, y,
-                            self.width, self.height,
-                            format, type,
-                            data)
+            if target != GL_TEXTURE_1D:
+                glTexSubImage2D(target, level,
+                                x, y,
+                                self.width, self.height,
+                                format, type,
+                                data)
+            else:
+                assert target == GL_TEXTURE_1D
+                glTexSubImage1D(
+                    target,
+                    level,
+                    x,
+                    self.width,
+                    format,
+                    type,
+                    data
+                    )
+
         glPopClientAttrib()
 
         if matrix:
@@ -1458,28 +1484,57 @@ class Texture(AbstractImage):
         
         :since: pyglet 1.1
         '''
-        target = GL_TEXTURE_2D
-        if rectangle or force_rectangle:
-            if not force_rectangle and _is_pow2(width) and _is_pow2(height):
-                rectangle = False
-            elif gl_info.have_extension('GL_ARB_texture_rectangle'):
-                target = GL_TEXTURE_RECTANGLE_ARB
-                rectangle = True
-            elif gl_info.have_extension('GL_NV_texture_rectangle'):
-                target = GL_TEXTURE_RECTANGLE_NV
-                rectangle = True
-            else:
-                rectangle = False
+        return cls._create(
+            GL_TEXTURE_2D,
+            width,
+            height,
+            internalformat,
+            rectangle,
+            force_rectangle,
+            min_filter,
+            mag_filter
+            )
 
-        if force_rectangle and not rectangle:
-            raise ImageException('Texture rectangle extensions not available')
+    @classmethod
+    def create_1d(cls, width, internalformat = GL_RGBA, min_filter = GL_LINEAR, mag_filter = GL_LINEAR ):
+        rectangle = False
+        force_rectangle = False
+        return cls._create(
+            GL_TEXTURE_1D,
+            width,
+            0,
+            internalformat,
+            rectangle,
+            force_rectangle,
+            min_filter,
+            mag_filter
+            )
 
-        if rectangle:
-            texture_width = width
-            texture_height = height
-        else:
-            texture_width = _nearest_pow2(width)
-            texture_height = _nearest_pow2(height)
+    @classmethod
+    def _create(cls, target, width, height, internalformat, 
+               rectangle, force_rectangle, min_filter, mag_filter):
+        texture_width = width
+        texture_height = height
+
+        if target != GL_TEXTURE_1D:
+            if rectangle or force_rectangle:
+                if not force_rectangle and _is_pow2(width) and _is_pow2(height):
+                    rectangle = False
+                elif gl_info.have_extension('GL_ARB_texture_rectangle'):
+                    target = GL_TEXTURE_RECTANGLE_ARB
+                    rectangle = True
+                elif gl_info.have_extension('GL_NV_texture_rectangle'):
+                    target = GL_TEXTURE_RECTANGLE_NV
+                    rectangle = True
+                else:
+                    rectangle = False
+
+            if force_rectangle and not rectangle:
+                raise ImageException('Texture rectangle extensions not available')
+
+            if rectangle == False:
+                texture_width = _nearest_pow2(width)
+                texture_height = _nearest_pow2(height)
 
 
         id = GLuint()
@@ -1489,12 +1544,24 @@ class Texture(AbstractImage):
         glTexParameteri(target, GL_TEXTURE_MAG_FILTER, mag_filter)
 
         blank = (GLubyte * (texture_width * texture_height * 4))()
-        glTexImage2D(target, 0,
-                     internalformat,
-                     texture_width, texture_height,
-                     0,
-                     GL_RGBA, GL_UNSIGNED_BYTE,
-                     blank)
+        if target == GL_TEXTURE_1D:
+            glTexImage1D(
+                target,
+                0,
+                internalformat,
+                texture_width,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                blank
+                )
+        else:
+            glTexImage2D(target, 0,
+                         internalformat,
+                         texture_width, texture_height,
+                         0,
+                         GL_RGBA, GL_UNSIGNED_BYTE,
+                         blank)
 
         texture = cls(texture_width, texture_height, target, id.value)
         texture.min_filter = min_filter
@@ -1542,9 +1609,13 @@ class Texture(AbstractImage):
 
         :rtype: `Texture`
         '''
-        if target not in (GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_RECTANGLE_ARB):
+        if target not in (GL_TEXTURE_RECTANGLE_NV, GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_1D):
             width = _nearest_pow2(min_width)
             height = _nearest_pow2(min_height)
+            tex_coords = cls.tex_coords
+        elif target == GL_TEXTURE_1D:
+            width = min_width
+            height = 0
             tex_coords = cls.tex_coords
         else:
             width = min_width
@@ -1561,12 +1632,25 @@ class Texture(AbstractImage):
 
         if internalformat is not None:
             blank = (GLubyte * (width * height * 4))()
-            glTexImage2D(target, 0,
-                         internalformat,
-                         width, height,
-                         0,
-                         GL_RGBA, GL_UNSIGNED_BYTE,
-                         blank)
+            if target == GL_TEXTURE_1D:
+                glTexImage1D(
+                    target,
+                    0,
+                    internalformat,
+                    width,
+                    height,
+                    0,
+                    GL_RGBA,
+                    GL_UNSIGNED_BYTE,
+                    blank
+                    )
+            else:
+                glTexImage2D(target, 0,
+                             internalformat,
+                             width, height,
+                             0,
+                             GL_RGBA, GL_UNSIGNED_BYTE,
+                             blank)
             glFlush()
                          
         texture = cls(width, height, target, id.value)
