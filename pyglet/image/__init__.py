@@ -1502,7 +1502,7 @@ class Texture(AbstractImage):
         return cls._create(
             GL_TEXTURE_1D,
             width,
-            0,
+            1,
             internalformat,
             rectangle,
             force_rectangle,
