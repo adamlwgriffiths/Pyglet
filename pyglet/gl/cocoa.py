@@ -6,6 +6,8 @@
 __docformat__ = 'restructuredtext'
 __version__ = '$Id: $'
 
+import platform
+
 from pyglet.gl.base import Config, CanvasConfig, Context
 
 from pyglet.gl import ContextException
@@ -18,6 +20,45 @@ from pyglet.libs.darwin.cocoapy import *
 
 NSOpenGLPixelFormat = ObjCClass('NSOpenGLPixelFormat')
 NSOpenGLContext = ObjCClass('NSOpenGLContext')
+
+"""Version is based on Darwin kernel, not OS-X version.
+OS-X / Darwin version history
+http://en.wikipedia.org/wiki/Darwin_(operating_system)#Release_history
+pre-release:    0.1, 0.2, 1.0, 1.1,
+kodiak:         1.2.1,
+cheetah:        1.3.1,
+puma:           1.4.1, 5.1 -> 5.5
+jaguar:         6.0.1 -> 6.8
+panther:        7.0 -> 7.9
+tiger:          8.0 -> 8.11
+leopard:        9.0 -> 9.8
+snow_leopard:   10.0 -> 10.8
+lion:           11.0 -> 11.4
+mountain_lion:  12.0 -> ?
+"""
+os_x_release = {
+    'pre-release':      (0,1),
+    'kodiak':           (1,2,1),
+    'cheetah':          (1,3,1),
+    'puma':             (1,4.1),
+    'jaguar':           (6,0,1),
+    'panther':          (7,),
+    'tiger':            (8,),
+    'leopard':          (9,),
+    'snow_leopard':     (10,),
+    'lion':             (11,),
+    'mountain_lion':    (12,),
+    }
+
+def os_x_version():
+    version = tuple(platform.release().split('.'))
+
+    # ensure we return a tuple
+    if len(version) > 0:
+        return version
+    return (version,)
+
+_os_x_version = os_x_version()
 
 # Valid names for GL attributes and their corresponding NSOpenGL constant.
 _gl_attributes = {
@@ -101,9 +142,28 @@ class CocoaConfig(Config):
         # on Mac OS X 10.6, because there we are simply rendering into a 
         # screen sized window.  See:
         # http://developer.apple.com/library/mac/#documentation/GraphicsImaging/Conceptual/OpenGL-MacProgGuide/opengl_fullscreen/opengl_cgl.html%23//apple_ref/doc/uid/TP40001987-CH210-SW6
-        attrs.append(NSOpenGLPFAFullScreen)
-        attrs.append(NSOpenGLPFAScreenMask)
-        attrs.append(quartz.CGDisplayIDToOpenGLDisplayMask(quartz.CGMainDisplayID()))
+        # this fails on Lion with the OpenGLProfile
+        # values set
+        if _os_x_version < os_x_release['lion']:
+            attrs.append(NSOpenGLPFAFullScreen)
+            attrs.append(NSOpenGLPFAScreenMask)
+            attrs.append(quartz.CGDisplayIDToOpenGLDisplayMask(quartz.CGMainDisplayID()))
+        else:
+            # check for opengl profile
+            # This requires OS-X Lion (Darwin 11) or higher
+            major_version = getattr(self, 'major_version', None)
+            minor_version = getattr(self, 'minor_version', None)
+            if major_version:
+                # tell os-x we want to request a profile
+                attrs.append(NSOpenGLPFAOpenGLProfile)
+
+                # check if we're wanting core or legacy
+                # as of OS-X (Mountain)Lion, there is only
+                # Legacy and Core 3.2
+                if (major_version, minor_version) == (3, 2):
+                    attrs.append(int(NSOpenGLProfileVersion3_2Core))
+                else:
+                    attrs.append(int(NSOpenGLProfileVersionLegacy))
         
         # Terminate the list.
         attrs.append(0)
@@ -136,6 +196,21 @@ class CocoaCanvasConfig(CanvasConfig):
         # Set these attributes so that we can run pyglet.info.
         for name, value in _fake_gl_attributes.items():
             setattr(self, name, value)
+
+        # Update the minor/major version from profile if Lion
+        if _os_x_version >= os_x_release['lion']:
+            profile = self._pixel_format.getValues_forAttribute_forVirtualScreen_(
+                None,
+                NSOpenGLPFAOpenGLProfile,
+                0
+                )
+            if profile == NSOpenGLProfileVersion3_2Core:
+                setattr(self, "major_version", 3)
+                setattr(self, "minor_version", 2)
+                setattr(self, "forward_compatible", True)
+            else:
+                setattr(self, "major_version", 2)
+                setattr(self, "minor_version", 1)
  
     def create_context(self, share):
         # Determine the shared NSOpenGLContext.
@@ -163,6 +238,10 @@ class CocoaContext(Context):
         self._nscontext = nscontext
 
     def attach(self, canvas):
+        # See if we want OpenGL 3 in a non-Lion OS
+        if _os_x_version < os_x_release['lion'] and self.config._requires_gl_3():
+            raise ContextException('OpenGL 3 not supported')
+
         super(CocoaContext, self).attach(canvas)
         # The NSView instance should be attached to a nondeferred window before calling
         # setView, otherwise you get an "invalid drawable" message.
