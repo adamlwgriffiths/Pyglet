@@ -199,8 +199,9 @@ class CocoaCanvasConfig(CanvasConfig):
 
         # Update the minor/major version from profile if Lion
         if _os_x_version >= os_x_release['lion']:
+            vals = c_int()
             profile = self._pixel_format.getValues_forAttribute_forVirtualScreen_(
-                None,
+                byref(vals),
                 NSOpenGLPFAOpenGLProfile,
                 0
                 )
