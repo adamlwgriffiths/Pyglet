@@ -151,19 +151,20 @@ class CocoaConfig(Config):
         else:
             # check for opengl profile
             # This requires OS-X Lion (Darwin 11) or higher
-            major_version = getattr(self, 'major_version', None)
-            minor_version = getattr(self, 'minor_version', None)
-            if major_version:
-                # tell os-x we want to request a profile
-                attrs.append(NSOpenGLPFAOpenGLProfile)
+            version = (
+                getattr(self, 'major_version', None),
+                getattr(self, 'minor_version', None)
+                )
+            # tell os-x we want to request a profile
+            attrs.append(NSOpenGLPFAOpenGLProfile)
 
-                # check if we're wanting core or legacy
-                # as of OS-X (Mountain)Lion, there is only
-                # Legacy and Core 3.2
-                if (major_version, minor_version) == (3, 2):
-                    attrs.append(int(NSOpenGLProfileVersion3_2Core))
-                else:
-                    attrs.append(int(NSOpenGLProfileVersionLegacy))
+            # check if we're wanting core or legacy
+            # as of OS-X (Mountain)Lion, there is only
+            # Legacy and Core 3.2
+            if version == (3, 2):
+                attrs.append(int(NSOpenGLProfileVersion3_2Core))
+            else:
+                attrs.append(int(NSOpenGLProfileVersionLegacy))
         
         # Terminate the list.
         attrs.append(0)
