@@ -206,10 +206,10 @@ class CocoaCanvasConfig(CanvasConfig):
                 NSOpenGLPFAOpenGLProfile,
                 0
                 )
+
             if profile == NSOpenGLProfileVersion3_2Core:
                 setattr(self, "major_version", 3)
                 setattr(self, "minor_version", 2)
-                setattr(self, "forward_compatible", True)
             else:
                 setattr(self, "major_version", 2)
                 setattr(self, "minor_version", 1)
